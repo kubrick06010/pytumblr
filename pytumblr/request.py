@@ -21,14 +21,10 @@ class TumblrRequest(object):
     def __init__(self, consumer_key, consumer_secret="", oauth_token="",
                  oauth_secret="", host="https://api.tumblr.com", timeout=30,
                  allow_custom_host=False):
-        parsed = urllib.parse.urlsplit(host)
-        if (parsed.scheme != "https" or not parsed.hostname or
-                parsed.username or parsed.password or parsed.query or
-                parsed.fragment or parsed.path not in ("", "/")):
-            raise ValueError("OAuth host must be an HTTPS origin")
-        self.host = host.rstrip("/")
-        if self.host != "https://api.tumblr.com" and not allow_custom_host:
-            raise ValueError("custom OAuth hosts require allow_custom_host=True")
+        # Keep OAuth1 host behavior backward compatible. The
+        # allow_custom_host argument is accepted for constructor symmetry with
+        # OAuth2, where credential-bearing custom hosts require explicit opt-in.
+        self.host = host
         self.timeout = timeout
         self.oauth = OAuth1(
             consumer_key,

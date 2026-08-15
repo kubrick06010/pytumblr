@@ -63,14 +63,16 @@ the complete replacement response.
 
 For an interactive OAuth 2 setup, install ``pytumblr[console]`` and run
 ``python interactive_console2.py``. Credential files are written atomically
-with owner-only permissions. Never commit them to source control.
-The console requests only the ``basic`` scope by default. Add ``write`` only
-when the application must change blog content, and ``offline_access`` only
-when refresh tokens are required.
+and use owner-only permissions where POSIX file modes are supported. Never
+commit them to source control. The console requests only the ``basic`` scope
+by default. Add ``write`` only when the application must change blog content,
+and ``offline_access`` only when refresh tokens are required.
 
-Requests are restricted to ``https://api.tumblr.com`` by default. Test servers
-must use HTTPS and require the explicit ``allow_custom_host=True`` opt-in;
-only enable it for a host you control because credentials are sent to it.
+OAuth 2 requests are restricted to ``https://api.tumblr.com`` by default.
+OAuth 2 test servers must use HTTPS and require the explicit
+``allow_custom_host=True`` opt-in; only enable it for a host you control
+because credentials are sent to it. OAuth 1 custom-host behavior is preserved
+for backward compatibility.
 
 Two easy ways to get your credentials to are:
 
