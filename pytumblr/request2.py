@@ -4,6 +4,7 @@ from future import standard_library
 standard_library.install_aliases()
 from builtins import str
 
+import json
 import urllib.parse
 
 import requests
@@ -27,6 +28,7 @@ class TumblrRequest2(object):
         self.token_updater = token_updater
         self.token = self._validated_token(token)
         self.headers = {"User-Agent": "pytumblr/" + self.__version}
+        self.last_response_headers = None
         self._update_auth_header()
 
     @staticmethod
@@ -86,12 +88,7 @@ class TumblrRequest2(object):
         return self.json_parse(response)
 
     def post_json(self, url, payload):
-        """Issue a JSON POST request, used by modern NPF endpoints."""
-        response = requests.post(
-            self.host + url, json=payload, headers=self.headers,
-            allow_redirects=False, timeout=self.timeout
-        )
-        return self.json_parse(response)
+        return self._json_request("post", url, payload)
 
     def put(self, url, params=None, files=None):
         url = self.host + url
@@ -110,12 +107,50 @@ class TumblrRequest2(object):
         return self.json_parse(response)
 
     def put_json(self, url, payload):
-        """Issue a JSON PUT request, used by modern NPF endpoints."""
-        response = requests.put(
+        return self._json_request("put", url, payload)
+
+    def post_npf(self, url, payload, media_sources=None):
+        if media_sources:
+            return self._multipart_npf("post", url, payload, media_sources)
+        return self.post_json(url, payload)
+
+    def put_npf(self, url, payload, media_sources=None):
+        if media_sources:
+            return self._multipart_npf("put", url, payload, media_sources)
+        return self.put_json(url, payload)
+
+    def _json_request(self, method, url, payload):
+        response = getattr(requests, method)(
             self.host + url, json=payload, headers=self.headers,
             allow_redirects=False, timeout=self.timeout
         )
         return self.json_parse(response)
+
+    def _multipart_npf(self, method, url, payload, media_sources):
+        opened = []
+        files = [("json", (None, json.dumps(payload), "application/json"))]
+        try:
+            for identifier, source in media_sources.items():
+                if hasattr(source, "read"):
+                    file_object = source
+                    filename = getattr(source, "name", str(identifier))
+                else:
+                    file_object = open(source, "rb")
+                    opened.append(file_object)
+                    filename = str(source)
+                files.append((str(identifier), (filename, file_object)))
+
+            response = getattr(requests, method)(
+                self.host + url,
+                files=files,
+                headers=self.headers,
+                allow_redirects=False,
+                timeout=self.timeout,
+            )
+            return self.json_parse(response)
+        finally:
+            for file_object in opened:
+                file_object.close()
 
     def delete(self, url, params):
         url = self.host + url
@@ -170,17 +205,27 @@ class TumblrRequest2(object):
         return dict(self.token)
 
     def json_parse(self, response):
+        self.last_response_headers = getattr(response, "headers", None)
         try:
             data = response.json()
         except (ValueError, TypeError):
             data = {
-                "meta": {"status": 500, "msg": "Server Error"},
+                "meta": {
+                    "status": getattr(response, "status_code", 500),
+                    "msg": getattr(response, "reason", "Server Error")
+                },
                 "response": {"error": "Malformed JSON or HTML was returned."},
             }
-        meta = data.get("meta") if isinstance(data, dict) else None
+
+        if isinstance(data, list):
+            return data
+        if not isinstance(data, dict):
+            return data
+
+        meta = data.get("meta")
         status = meta.get("status") if isinstance(meta, dict) else None
         if status is None:
             status = getattr(response, "status_code", 500)
-        if 200 <= status <= 399 and isinstance(data, dict):
+        if 200 <= status <= 399:
             return data.get("response", data)
         return data
