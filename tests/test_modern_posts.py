@@ -26,9 +26,16 @@ def test_create_post_uses_modern_npf_endpoint():
     assert result == {"id": "123"}
     client.request.post_npf.assert_called_once_with(
         "/v2/blog/example.tumblr.com/posts",
-        {"content": content, "tags": ["python", "tumblr"]},
+        {"content": content, "tags": ["python", "tumblr"], "state": "published"},
         None,
     )
+
+
+def test_create_post_preserves_explicit_state():
+    client = _client()
+    content = [{"type": "text", "text": "Draft"}]
+    client.create_post("example.tumblr.com", content=content, state="draft")
+    assert client.request.post_npf.call_args[0][1]["state"] == "draft"
 
 
 def test_create_post_passes_media_sources_outside_json():
@@ -40,7 +47,7 @@ def test_create_post_passes_media_sources_outside_json():
     )
     client.request.post_npf.assert_called_once_with(
         "/v2/blog/example.tumblr.com/posts",
-        {"content": content},
+        {"content": content, "state": "published"},
         media_sources,
     )
 
@@ -111,13 +118,48 @@ def test_reblog_resolves_and_caches_requirements():
     assert payload["reblog_key"] == "rk"
 
 
+def test_image_upload_block_uses_creation_identifier_object():
+    block = npf.image_upload_block("media0")
+    assert block == {"type": "image", "media": {"identifier": "media0"}}
+
+
+def test_audio_upload_block_is_native_tumblr_media_object():
+    block = npf.audio_upload_block("media0")
+    assert block == {
+        "type": "audio",
+        "provider": "tumblr",
+        "media": {"identifier": "media0"},
+    }
+
+
+def test_video_upload_block_is_native_tumblr_media_object():
+    block = npf.video_upload_block("media0")
+    assert block == {
+        "type": "video",
+        "provider": "tumblr",
+        "media": {"identifier": "media0"},
+    }
+
+
 def test_create_photo_local_file_builds_npf_media_reference():
     client = _client()
     client.create_post = Mock(return_value={"id": "x"})
     client.create_photo("example.tumblr.com", data="/tmp/photo.jpg", caption="hi")
     kwargs = client.create_post.call_args[1]
-    assert kwargs["content"][0]["media"][0]["identifier"] == "media0"
+    assert kwargs["content"][0]["media"]["identifier"] == "media0"
     assert kwargs["media_sources"] == {"media0": "/tmp/photo.jpg"}
+
+
+def test_create_audio_local_file_builds_native_media_reference():
+    client = _client()
+    client.create_post = Mock(return_value={"id": "x"})
+    client.create_audio("example.tumblr.com", data="/tmp/audio.wav")
+    kwargs = client.create_post.call_args[1]
+    assert kwargs["content"][0] == {
+        "type": "audio",
+        "provider": "tumblr",
+        "media": {"identifier": "media0"},
+    }
 
 
 def test_npf_helpers_traverse_trail_media():
