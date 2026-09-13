@@ -4,14 +4,13 @@ from future import standard_library
 standard_library.install_aliases()
 from builtins import str
 
-import json
 import urllib.parse
-
 import requests
 from requests.exceptions import TooManyRedirects
+from .transport import ModernTransportMixin
 
 
-class TumblrRequest2(object):
+class TumblrRequest2(ModernTransportMixin, object):
     """HTTP transport for Tumblr OAuth 2 bearer-token requests."""
 
     __version = "0.1.3"
@@ -87,9 +86,6 @@ class TumblrRequest2(object):
             )
         return self.json_parse(response)
 
-    def post_json(self, url, payload):
-        return self._json_request("post", url, payload)
-
     def put(self, url, params=None, files=None):
         url = self.host + url
         params = params or {}
@@ -105,52 +101,6 @@ class TumblrRequest2(object):
                 allow_redirects=False, timeout=self.timeout
             )
         return self.json_parse(response)
-
-    def put_json(self, url, payload):
-        return self._json_request("put", url, payload)
-
-    def post_npf(self, url, payload, media_sources=None):
-        if media_sources:
-            return self._multipart_npf("post", url, payload, media_sources)
-        return self.post_json(url, payload)
-
-    def put_npf(self, url, payload, media_sources=None):
-        if media_sources:
-            return self._multipart_npf("put", url, payload, media_sources)
-        return self.put_json(url, payload)
-
-    def _json_request(self, method, url, payload):
-        response = getattr(requests, method)(
-            self.host + url, json=payload, headers=self.headers,
-            allow_redirects=False, timeout=self.timeout
-        )
-        return self.json_parse(response)
-
-    def _multipart_npf(self, method, url, payload, media_sources):
-        opened = []
-        files = [("json", (None, json.dumps(payload), "application/json"))]
-        try:
-            for identifier, source in media_sources.items():
-                if hasattr(source, "read"):
-                    file_object = source
-                    filename = getattr(source, "name", str(identifier))
-                else:
-                    file_object = open(source, "rb")
-                    opened.append(file_object)
-                    filename = str(source)
-                files.append((str(identifier), (filename, file_object)))
-
-            response = getattr(requests, method)(
-                self.host + url,
-                files=files,
-                headers=self.headers,
-                allow_redirects=False,
-                timeout=self.timeout,
-            )
-            return self.json_parse(response)
-        finally:
-            for file_object in opened:
-                file_object.close()
 
     def delete(self, url, params):
         url = self.host + url
@@ -203,29 +153,3 @@ class TumblrRequest2(object):
         if self.token_updater is not None:
             self.token_updater(dict(self.token))
         return dict(self.token)
-
-    def json_parse(self, response):
-        self.last_response_headers = getattr(response, "headers", None)
-        try:
-            data = response.json()
-        except (ValueError, TypeError):
-            data = {
-                "meta": {
-                    "status": getattr(response, "status_code", 500),
-                    "msg": getattr(response, "reason", "Server Error")
-                },
-                "response": {"error": "Malformed JSON or HTML was returned."},
-            }
-
-        if isinstance(data, list):
-            return data
-        if not isinstance(data, dict):
-            return data
-
-        meta = data.get("meta")
-        status = meta.get("status") if isinstance(meta, dict) else None
-        if status is None:
-            status = getattr(response, "status_code", 500)
-        if 200 <= status <= 399:
-            return data.get("response", data)
-        return data
