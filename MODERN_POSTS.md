@@ -1,22 +1,66 @@
-# Modern Posts milestone
+# Modern PyTumblr
 
-This branch is the first isolated step toward a modern, NPF-first PyTumblr client.
+This branch is an isolated modernization layer built on top of `agent/oauth2-support`.
+The historical `TumblrRestClient` remains available unchanged; modern behavior is opt-in with:
 
-## Included
+```python
+from pytumblr.modern import ModernTumblrRestClient
+```
 
-- OAuth1 and OAuth2 JSON request helpers for modern Tumblr endpoints.
-- HTTP PUT support in both transports.
-- `pytumblr.modern.ModernTumblrRestClient`.
-- Raw-NPF `create_post()` using `POST /v2/blog/{blog}/posts`.
-- Raw-NPF `edit_post()` using `PUT /v2/blog/{blog}/posts/{id}`.
-- Focused tests for endpoint selection, payload preservation, tags, and validation.
+## Modern post API
 
-## Deliberately deferred
+- NPF-first reads (`npf=true` by default, toggleable with `npf_consumption_on/off`).
+- `create_post()` via `POST /v2/blog/{blog}/posts`.
+- `edit_post()` via `PUT /v2/blog/{blog}/posts/{id}`.
+- NPF reblogs with automatic parent UUID/reblog-key lookup and caching.
+- JSON and multipart NPF requests under both OAuth1 and OAuth2.
+- `media_sources={identifier: path_or_file}` compatible with Tumblr's multipart JSON+media shape.
 
-- Multipart NPF media uploads.
-- Typed NPF content/layout helpers.
-- Automatic legacy-to-NPF conversion.
-- Pagination iterators and response `TypedDict`s.
-- Notifications/trail convenience helpers.
+Example media upload:
 
-The legacy `TumblrRestClient` surface remains unchanged in this milestone; users opt in with `from pytumblr.modern import ModernTumblrRestClient` while the modern API matures.
+```python
+client.create_post(
+    "example.tumblr.com",
+    content=[
+        {"type": "text", "text": "hello"},
+        {"type": "image", "media": [{"type": "image/jpeg", "identifier": "photo"}]},
+    ],
+    media_sources={"photo": "/path/to/photo.jpg"},
+)
+```
+
+## Convenience API
+
+- `get_single_post()`
+- `notifications()`
+- `notes()`
+- `iter_posts()`, `iter_queue()`, `iter_likes()`
+- `get_root_post()`
+- NPF traversal helpers in `pytumblr.npf`: `iter_blocks`, `iter_media`, `iter_images`, `iter_text`
+- block constructors for text, link, image, audio and video
+
+The modern client also exposes legacy-shaped creation helpers (`create_text`, `create_photo`, `create_quote`, `create_link`, `create_chat`, `create_audio`, `create_video`) implemented through modern NPF endpoints. The classic client retains the original legacy endpoint behavior.
+
+## Async
+
+`pytumblr.async_client.AsyncModernTumblrRestClient` returns asyncio Futures while reusing the same synchronous OAuth/signing and multipart implementation. On Python 3 the results can be awaited directly.
+
+## Typing
+
+The package ships PEP 561 metadata (`py.typed`) and `.pyi` stubs. `pytumblr.types` keeps dict semantics at runtime while exposing `TypedDict` definitions to static type checkers.
+
+## Regression coverage
+
+The branch covers:
+
+- modern create/edit endpoint selection
+- list-valued tags on edits
+- OAuth1/OAuth2 multipart NPF payloads
+- bearer-token preservation during multipart uploads
+- Tumblr `/tagged` top-level array responses
+- pagination iterators
+- reblog metadata caching
+- trail/media traversal
+- local photo legacy→NPF adaptation
+
+CI now runs pytest, rather than only building distributions, across Python 3.7, 3.8, 3.9, 3.11 and 3.12 before building the package.
