@@ -1,5 +1,7 @@
 """Modern Tumblr API helpers built on top of the backwards-compatible client."""
 
+import mimetypes
+
 from . import TumblrRestClient
 from .helpers import validate_blogname
 from . import npf
@@ -79,6 +81,8 @@ class ModernTumblrRestClient(TumblrRestClient):
         kwargs.setdefault("state", "published")
         self._validate_npf_payload(kwargs, require_content=True)
         payload = dict(kwargs)
+        if isinstance(payload.get("tags"), list):
+            payload["tags"] = ",".join(payload["tags"])
         media_sources = payload.pop("media_sources", None)
         return self.request.post_npf(
             "/v2/blog/{}/posts".format(blogname), payload, media_sources
@@ -90,6 +94,8 @@ class ModernTumblrRestClient(TumblrRestClient):
         if not kwargs:
             raise ValueError("at least one NPF field must be provided")
         payload = dict(kwargs)
+        if isinstance(payload.get("tags"), list):
+            payload["tags"] = ",".join(payload["tags"])
         media_sources = payload.pop("media_sources", None)
         return self.request.put_npf(
             "/v2/blog/{}/posts/{}".format(blogname, id), payload, media_sources
@@ -259,7 +265,8 @@ class ModernTumblrRestClient(TumblrRestClient):
             paths = data if isinstance(data, list) else [data]
             for index, path in enumerate(paths):
                 identifier = "media{}".format(index)
-                content.append(npf.image_upload_block(identifier))
+                media_type = mimetypes.guess_type(str(path))[0]
+                content.append(npf.image_upload_block(identifier, media_type=media_type))
                 media_sources[identifier] = path
         else:
             raise ValueError("create_photo requires source or data")
@@ -281,7 +288,8 @@ class ModernTumblrRestClient(TumblrRestClient):
         if external_url:
             content.append(npf.audio_block(external_url, provider=provider))
         elif data:
-            content.append(npf.audio_upload_block("media0"))
+            media_type = mimetypes.guess_type(str(data))[0]
+            content.append(npf.audio_upload_block("media0", media_type=media_type))
             kwargs["media_sources"] = {"media0": data}
         else:
             raise ValueError("create_audio requires external_url or data")

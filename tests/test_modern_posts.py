@@ -26,7 +26,7 @@ def test_create_post_uses_modern_npf_endpoint():
     assert result == {"id": "123"}
     client.request.post_npf.assert_called_once_with(
         "/v2/blog/example.tumblr.com/posts",
-        {"content": content, "tags": ["python", "tumblr"], "state": "published"},
+        {"content": content, "tags": "python,tumblr", "state": "published"},
         None,
     )
 
@@ -52,13 +52,23 @@ def test_create_post_passes_media_sources_outside_json():
     )
 
 
+def test_create_post_serializes_tags_for_tumblr():
+    client = _client()
+    client.create_post(
+        "example.tumblr.com",
+        content=[{"type": "text", "text": "Tagged"}],
+        tags=["python", "tumblr"],
+    )
+    assert client.request.post_npf.call_args[0][1]["tags"] == "python,tumblr"
+
+
 def test_create_post_requires_non_empty_content():
     client = _client()
     with pytest.raises(ValueError):
         client.create_post("example.tumblr.com", content=[])
 
 
-def test_edit_post_uses_put_and_preserves_tags_as_list():
+def test_edit_post_uses_put_and_serializes_tags():
     client = _client()
     client.request.put_npf.return_value = {"id": "123"}
     content = [{"type": "text", "text": "Edited"}]
@@ -70,7 +80,7 @@ def test_edit_post_uses_put_and_preserves_tags_as_list():
     assert result == {"id": "123"}
     client.request.put_npf.assert_called_once_with(
         "/v2/blog/example.tumblr.com/posts/123",
-        {"content": content, "tags": ["python", "api"]},
+        {"content": content, "tags": "python,api"},
         None,
     )
 
@@ -157,6 +167,15 @@ def test_create_audio_local_file_builds_native_media_reference():
     kwargs = client.create_post.call_args[1]
     assert kwargs["content"][0] == {
         "type": "audio",
+        "provider": "tumblr",
+        "media": {"identifier": "media0", "type": "audio/x-wav"},
+    }
+    assert kwargs["media_sources"] == {"media0": "/tmp/audio.wav"}
+
+
+def test_video_upload_block_uses_native_media_object():
+    assert npf.video_upload_block("media0") == {
+        "type": "video",
         "provider": "tumblr",
         "media": {"identifier": "media0"},
     }

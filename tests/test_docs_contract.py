@@ -95,7 +95,8 @@ def test_documented_create_post_flow_without_network():
                 "content": [
                     {"type": "text", "text": "Hello from modern PyTumblr"}
                 ],
-                "tags": ["python", "tumblr"],
+                "tags": "python,tumblr",
+                "state": "published",
             },
             None,
         )

@@ -41,6 +41,7 @@ def test_oauth1_npf_multipart_has_json_part_identifier_and_mime(tmp_path):
         assert payload["content"][0]["media"] == {"identifier": "photo"}
         assert files[1][0] == "photo"
         assert files[1][1][2] == "image/jpeg"
+        assert "Content-Type" not in post.call_args[1]["headers"]
 
 
 def test_oauth2_npf_multipart_keeps_bearer_header(tmp_path):
