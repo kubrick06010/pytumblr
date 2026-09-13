@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 from pytumblr.modern import ModernTumblrRestClient
+from pytumblr import npf
 
 
 def _client():
@@ -15,19 +16,32 @@ def _client():
 
 def test_create_post_uses_modern_npf_endpoint():
     client = _client()
-    client.request.post_json.return_value = {"id": "123"}
+    client.request.post_npf.return_value = {"id": "123"}
     content = [{"type": "text", "text": "Hello from Python"}]
 
     result = client.create_post(
-        "example.tumblr.com",
-        content=content,
-        tags=["python", "tumblr"],
+        "example.tumblr.com", content=content, tags=["python", "tumblr"]
     )
 
     assert result == {"id": "123"}
-    client.request.post_json.assert_called_once_with(
+    client.request.post_npf.assert_called_once_with(
         "/v2/blog/example.tumblr.com/posts",
         {"content": content, "tags": ["python", "tumblr"]},
+        None,
+    )
+
+
+def test_create_post_passes_media_sources_outside_json():
+    client = _client()
+    media_sources = {"photo": "/tmp/photo.jpg"}
+    content = [npf.image_upload_block("photo")]
+    client.create_post(
+        "example.tumblr.com", content=content, media_sources=media_sources
+    )
+    client.request.post_npf.assert_called_once_with(
+        "/v2/blog/example.tumblr.com/posts",
+        {"content": content},
+        media_sources,
     )
 
 
@@ -39,20 +53,18 @@ def test_create_post_requires_non_empty_content():
 
 def test_edit_post_uses_put_and_preserves_tags_as_list():
     client = _client()
-    client.request.put_json.return_value = {"id": "123"}
+    client.request.put_npf.return_value = {"id": "123"}
     content = [{"type": "text", "text": "Edited"}]
 
     result = client.edit_post(
-        "example.tumblr.com",
-        123,
-        content=content,
-        tags=["python", "api"],
+        "example.tumblr.com", 123, content=content, tags=["python", "api"]
     )
 
     assert result == {"id": "123"}
-    client.request.put_json.assert_called_once_with(
+    client.request.put_npf.assert_called_once_with(
         "/v2/blog/example.tumblr.com/posts/123",
         {"content": content, "tags": ["python", "api"]},
+        None,
     )
 
 
@@ -70,3 +82,47 @@ def test_unknown_npf_options_are_rejected():
             content=[{"type": "text", "text": "Hi"}],
             imaginary_option=True,
         )
+
+
+def test_iter_posts_paginates_until_short_page():
+    client = _client()
+    client.posts = Mock(side_effect=[
+        {"posts": [{"id": i} for i in range(20)]},
+        {"posts": [{"id": 20}, {"id": 21}]},
+    ])
+    assert [p["id"] for p in client.iter_posts("example.tumblr.com")] == list(range(22))
+
+
+def test_reblog_resolves_and_caches_requirements():
+    client = _client()
+    client.get_single_post = Mock(return_value={
+        "reblog_key": "rk",
+        "blog": {"uuid": "t:uuid"},
+    })
+    client.request.post_npf.return_value = {"id": "new"}
+
+    client.reblog_post("dest.tumblr.com", "source.tumblr.com", 42)
+    client.reblog_post("dest.tumblr.com", "source.tumblr.com", 42)
+
+    assert client.get_single_post.call_count == 1
+    payload = client.request.post_npf.call_args[0][1]
+    assert payload["parent_tumblelog_uuid"] == "t:uuid"
+    assert payload["parent_post_id"] == "42"
+    assert payload["reblog_key"] == "rk"
+
+
+def test_create_photo_local_file_builds_npf_media_reference():
+    client = _client()
+    client.create_post = Mock(return_value={"id": "x"})
+    client.create_photo("example.tumblr.com", data="/tmp/photo.jpg", caption="hi")
+    kwargs = client.create_post.call_args[1]
+    assert kwargs["content"][0]["media"][0]["identifier"] == "media0"
+    assert kwargs["media_sources"] == {"media0": "/tmp/photo.jpg"}
+
+
+def test_npf_helpers_traverse_trail_media():
+    post = {
+        "content": [{"type": "image", "media": [{"url": "a"}]}],
+        "trail": [{"content": [{"type": "image", "media": [{"url": "b"}]}]}],
+    }
+    assert [item["url"] for item in npf.iter_images(post)] == ["a", "b"]
