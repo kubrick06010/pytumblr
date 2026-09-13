@@ -12,18 +12,13 @@ from requests.exceptions import TooManyRedirects
 
 
 class TumblrRequest(object):
-    """
-    A simple request object that lets us query the Tumblr API
-    """
+    """A simple request object that lets us query the Tumblr API."""
 
     __version = "0.1.3"
 
     def __init__(self, consumer_key, consumer_secret="", oauth_token="",
                  oauth_secret="", host="https://api.tumblr.com", timeout=30,
                  allow_custom_host=False):
-        # Keep OAuth1 host behavior backward compatible. The
-        # allow_custom_host argument is accepted for constructor symmetry with
-        # OAuth2, where credential-bearing custom hosts require explicit opt-in.
         self.host = host
         self.timeout = timeout
         self.oauth = OAuth1(
@@ -33,19 +28,12 @@ class TumblrRequest(object):
             resource_owner_secret=oauth_secret
         )
         self.consumer_key = consumer_key
-
-        self.headers = {
-            "User-Agent": "pytumblr/" + self.__version,
-        }
+        self.headers = {"User-Agent": "pytumblr/" + self.__version}
 
     def get(self, url, params):
-        """
-        Issues a GET request against the API, properly formatting the params
-        """
         url = self.host + url
         if params:
             url = url + "?" + urllib.parse.urlencode(params)
-
         try:
             resp = requests.get(
                 url, allow_redirects=False, headers=self.headers,
@@ -53,13 +41,9 @@ class TumblrRequest(object):
             )
         except TooManyRedirects as e:
             resp = e.response
-
         return self.json_parse(resp)
 
     def post(self, url, params=None, files=None):
-        """
-        Issues a POST request against the API, allows for multipart data uploads
-        """
         url = self.host + url
         params = params or {}
         files = files or {}
@@ -74,8 +58,15 @@ class TumblrRequest(object):
         )
         return self.json_parse(resp)
 
+    def post_json(self, url, payload):
+        """Issue a JSON POST request, used by modern NPF endpoints."""
+        resp = requests.post(
+            self.host + url, json=payload, headers=self.headers, auth=self.oauth,
+            allow_redirects=False, timeout=self.timeout
+        )
+        return self.json_parse(resp)
+
     def put(self, url, params=None, files=None):
-        """Issues a PUT request against the API."""
         url = self.host + url
         params = params or {}
         files = files or {}
@@ -94,14 +85,18 @@ class TumblrRequest(object):
             )
         return self.json_parse(resp)
 
+    def put_json(self, url, payload):
+        """Issue a JSON PUT request, used by modern NPF endpoints."""
+        resp = requests.put(
+            self.host + url, json=payload, headers=self.headers, auth=self.oauth,
+            allow_redirects=False, timeout=self.timeout
+        )
+        return self.json_parse(resp)
+
     def delete(self, url, params):
-        """
-        Issues a DELETE request against the API, properly formatting the params
-        """
         url = self.host + url
         if params:
             url = url + "?" + urllib.parse.urlencode(params)
-
         try:
             resp = requests.delete(
                 url, allow_redirects=False, headers=self.headers,
@@ -109,35 +104,20 @@ class TumblrRequest(object):
             )
         except TooManyRedirects as e:
             resp = e.response
-
         return self.json_parse(resp)
 
     def json_parse(self, response):
-        """
-        Wraps and abstracts response validation and JSON parsing
-        to make sure the user gets the correct response.
-        """
         try:
             data = response.json()
         except ValueError:
-            data = {'meta': { 'status': 500, 'msg': 'Server Error'}, 'response': {"error": "Malformed JSON or HTML was returned."}}
-
+            data = {'meta': {'status': 500, 'msg': 'Server Error'}, 'response': {"error": "Malformed JSON or HTML was returned."}}
         if 200 <= data['meta']['status'] <= 399:
             return data['response']
-        else:
-            return data
+        return data
 
     def post_multipart(self, url, params, files):
-        """
-        Generates and issues a multipart request for data files
-        """
         resp = requests.post(
-            url,
-            data=params,
-            files=files,
-            headers=self.headers,
-            allow_redirects=False,
-            auth=self.oauth,
-            timeout=self.timeout
+            url, data=params, files=files, headers=self.headers,
+            allow_redirects=False, auth=self.oauth, timeout=self.timeout
         )
         return self.json_parse(resp)
