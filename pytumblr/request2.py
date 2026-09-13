@@ -54,9 +54,7 @@ class TumblrRequest2(object):
         return dict(token)
 
     def _update_auth_header(self):
-        self.headers["Authorization"] = "Bearer {}".format(
-            self.token["access_token"]
-        )
+        self.headers["Authorization"] = "Bearer {}".format(self.token["access_token"])
 
     def get(self, url, params):
         url = self.host + url
@@ -87,8 +85,15 @@ class TumblrRequest2(object):
             )
         return self.json_parse(response)
 
+    def post_json(self, url, payload):
+        """Issue a JSON POST request, used by modern NPF endpoints."""
+        response = requests.post(
+            self.host + url, json=payload, headers=self.headers,
+            allow_redirects=False, timeout=self.timeout
+        )
+        return self.json_parse(response)
+
     def put(self, url, params=None, files=None):
-        """Issue an OAuth2-authenticated PUT request."""
         url = self.host + url
         params = params or {}
         files = files or {}
@@ -102,6 +107,14 @@ class TumblrRequest2(object):
                 url, data=params, headers=self.headers,
                 allow_redirects=False, timeout=self.timeout
             )
+        return self.json_parse(response)
+
+    def put_json(self, url, payload):
+        """Issue a JSON PUT request, used by modern NPF endpoints."""
+        response = requests.put(
+            self.host + url, json=payload, headers=self.headers,
+            allow_redirects=False, timeout=self.timeout
+        )
         return self.json_parse(response)
 
     def delete(self, url, params):
@@ -139,9 +152,7 @@ class TumblrRequest2(object):
             payload = response.json()
         except ValueError:
             raise RuntimeError(
-                "Tumblr OAuth2 refresh returned HTTP {} with invalid JSON".format(
-                    response.status_code
-                )
+                "Tumblr OAuth2 refresh returned HTTP {} with invalid JSON".format(response.status_code)
             )
         if not response.ok:
             description = payload.get("error_description") or payload.get("error")
