@@ -5,12 +5,12 @@ standard_library.install_aliases()
 from builtins import str
 
 import urllib.parse
-
 import requests
 from requests.exceptions import TooManyRedirects
+from .transport import ModernTransportMixin
 
 
-class TumblrRequest2(object):
+class TumblrRequest2(ModernTransportMixin, object):
     """HTTP transport for Tumblr OAuth 2 bearer-token requests."""
 
     __version = "0.1.3"
@@ -27,6 +27,7 @@ class TumblrRequest2(object):
         self.token_updater = token_updater
         self.token = self._validated_token(token)
         self.headers = {"User-Agent": "pytumblr/" + self.__version}
+        self.last_response_headers = None
         self._update_auth_header()
 
     @staticmethod
@@ -54,9 +55,7 @@ class TumblrRequest2(object):
         return dict(token)
 
     def _update_auth_header(self):
-        self.headers["Authorization"] = "Bearer {}".format(
-            self.token["access_token"]
-        )
+        self.headers["Authorization"] = "Bearer {}".format(self.token["access_token"])
 
     def get(self, url, params):
         url = self.host + url
@@ -82,6 +81,22 @@ class TumblrRequest2(object):
             )
         else:
             response = requests.post(
+                url, data=params, headers=self.headers,
+                allow_redirects=False, timeout=self.timeout
+            )
+        return self.json_parse(response)
+
+    def put(self, url, params=None, files=None):
+        url = self.host + url
+        params = params or {}
+        files = files or {}
+        if files:
+            response = requests.put(
+                url, data=params, files=files, headers=self.headers,
+                allow_redirects=False, timeout=self.timeout
+            )
+        else:
+            response = requests.put(
                 url, data=params, headers=self.headers,
                 allow_redirects=False, timeout=self.timeout
             )
@@ -122,9 +137,7 @@ class TumblrRequest2(object):
             payload = response.json()
         except ValueError:
             raise RuntimeError(
-                "Tumblr OAuth2 refresh returned HTTP {} with invalid JSON".format(
-                    response.status_code
-                )
+                "Tumblr OAuth2 refresh returned HTTP {} with invalid JSON".format(response.status_code)
             )
         if not response.ok:
             description = payload.get("error_description") or payload.get("error")
@@ -140,19 +153,3 @@ class TumblrRequest2(object):
         if self.token_updater is not None:
             self.token_updater(dict(self.token))
         return dict(self.token)
-
-    def json_parse(self, response):
-        try:
-            data = response.json()
-        except (ValueError, TypeError):
-            data = {
-                "meta": {"status": 500, "msg": "Server Error"},
-                "response": {"error": "Malformed JSON or HTML was returned."},
-            }
-        meta = data.get("meta") if isinstance(data, dict) else None
-        status = meta.get("status") if isinstance(meta, dict) else None
-        if status is None:
-            status = getattr(response, "status_code", 500)
-        if 200 <= status <= 399 and isinstance(data, dict):
-            return data.get("response", data)
-        return data

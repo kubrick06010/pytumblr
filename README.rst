@@ -2,6 +2,11 @@ PyTumblr
 ========
 |Build Status|
 
+PyTumblr is a Python client for Tumblr's API v2. The historical
+``TumblrRestClient`` remains available for backwards compatibility, while the
+``modern-posts`` branch also provides an opt-in NPF-first client for current
+Tumblr post workflows.
+
 Installation
 ============
 
@@ -19,15 +24,15 @@ Install from source:
     $ cd pytumblr
     $ python -m build
 
-Usage
-=====
+Classic client
+==============
 
-Create a client
----------------
-
-A ``pytumblr.TumblrRestClient`` is the object you'll make all of your calls to the Tumblr API through. Creating one is this easy:
+OAuth 1
+-------
 
 .. code:: python
+
+    import pytumblr
 
     client = pytumblr.TumblrRestClient(
         '<consumer_key>',
@@ -36,10 +41,16 @@ A ``pytumblr.TumblrRestClient`` is the object you'll make all of your calls to t
         '<oauth_secret>',
     )
 
-    client.info() # Grabs the current user information
+    client.info()
 
-OAuth 2 bearer tokens are also supported. Pass the token response returned by
-Tumblr together with the application client id:
+The classic surface retains the established PyTumblr methods for user, blog,
+post, queue, draft, submission, likes, followers, tagged-post and legacy post
+creation workflows.
+
+OAuth 2
+-------
+
+OAuth 2 bearer tokens are supported through ``TumblrRestClient2``:
 
 .. code:: python
 
@@ -57,266 +68,170 @@ Tumblr together with the application client id:
 
     client.info()
 
-When the access token expires, call ``client.refresh_token()`` and persist the
-returned token response. Tumblr may rotate the refresh token, so always store
-the complete replacement response.
+When an access token expires, call ``client.refresh_token()`` and persist the
+complete returned token response. Tumblr may rotate refresh tokens.
 
-For an interactive OAuth 2 setup, install ``pytumblr[console]`` and run
+For interactive OAuth 2 setup, install ``pytumblr[console]`` and run
 ``python interactive_console2.py``. Credential files are written atomically
-and use owner-only permissions where POSIX file modes are supported. Never
-commit them to source control. The console requests only the ``basic`` scope
-by default. Add ``write`` only when the application must change blog content,
-and ``offline_access`` only when refresh tokens are required.
+and use owner-only permissions where POSIX file modes are supported. Do not
+commit them to source control.
 
 OAuth 2 requests are restricted to ``https://api.tumblr.com`` by default.
-OAuth 2 test servers must use HTTPS and require the explicit
-``allow_custom_host=True`` opt-in; only enable it for a host you control
-because credentials are sent to it. OAuth 1 custom-host behavior is preserved
-for backward compatibility.
+Custom OAuth 2 hosts must use HTTPS and require the explicit
+``allow_custom_host=True`` opt-in.
 
-Two easy ways to get your credentials to are:
+Modern NPF client
+=================
 
-1. The built-in ``interactive_console.py`` tool (if you already have a consumer key & secret)
-2. The Tumblr API console at https://api.tumblr.com/console
-3. Get sample login code at https://api.tumblr.com/console/calls/user/info
-
-Supported Methods
------------------
-
-User Methods
-~~~~~~~~~~~~
+The modern client is opt-in and keeps the classic client unchanged:
 
 .. code:: python
 
-    client.info() # get information about the authenticating user
-    client.dashboard() # get the dashboard for the authenticating user
-    client.likes() # get the likes for the authenticating user
-    client.following() # get the blogs followed by the authenticating user
+    from pytumblr.modern import ModernTumblrRestClient
 
-    client.follow('codingjester.tumblr.com') # follow a blog
-    client.unfollow('codingjester.tumblr.com') # unfollow a blog
+    client = ModernTumblrRestClient(
+        '<consumer_key>',
+        '<consumer_secret>',
+        '<oauth_token>',
+        '<oauth_secret>',
+    )
 
-    client.like(id, reblogkey) # like a post
-    client.unlike(id, reblogkey) # unlike a post
+    post = client.create_post(
+        'example.tumblr.com',
+        content=[{'type': 'text', 'text': 'Hello from modern PyTumblr'}],
+        tags=['python', 'tumblr'],
+    )
 
-Blog Methods
-~~~~~~~~~~~~
+The modern surface provides:
 
-.. code:: python
+- NPF-first ``posts()``, ``queue()``, ``drafts()`` and ``submission()`` reads.
+- Raw-NPF ``create_post()`` and ``edit_post()``.
+- NPF ``reblog_post()`` with parent metadata lookup and caching.
+- OAuth 1 and OAuth 2 JSON and multipart NPF media transport.
+- ``get_single_post()``, ``notes()`` and ``notifications()``.
+- ``iter_posts()``, ``iter_queue()`` and ``iter_likes()`` pagination helpers.
+- NPF block/media/trail helpers in ``pytumblr.npf``.
+- Legacy-shaped creation adapters backed by NPF.
+- PEP 561 typing metadata and an async Future-based facade.
 
-    client.blog_info(blogName) # get information about a blog
-    client.posts(blogName, **params) # get posts for a blog
-    client.avatar(blogName) # get the avatar for a blog
-    client.blog_likes(blogName) # get the likes on a blog
-    client.followers(blogName) # get the followers of a blog
-    client.blog_following(blogName) # get the publicly exposed blogs that [blogName] follows
-    client.queue(blogName) # get the queue for a given blog
-    client.submission(blogName) # get the submissions for a given blog
+See `Modern PyTumblr documentation <docs/modern.rst>`_ for the public modern
+API guide, media examples, migration helpers, typing and async usage.
 
-Post Methods
-~~~~~~~~~~~~
+Common classic methods
+======================
 
-Creating posts
-^^^^^^^^^^^^^^
-
-PyTumblr lets you create all of the various types that Tumblr supports. When using these types there are a few defaults that are able to be used with any post type.
-
-The default supported types are described below.
-
--  **state** - a string, the state of the post. Supported types are *published*, *draft*, *queue*, *private*
--  **tags** - a list, a list of strings that you want tagged on the post. eg: ["testing", "magic", "1"]
--  **tweet** - a string, the string of the customized tweet you want. eg: "Man I love my mega awesome post!"
--  **date** - a string, the customized GMT that you want
--  **format** - a string, the format that your post is in. Support types are *html* or *markdown*
--  **slug** - a string, the slug for the url of the post you want
-
-We'll show examples throughout of these default examples while showcasing all the specific post types.
-
-Creating a photo post
-'''''''''''''''''''''
-
-Creating a photo post supports a bunch of different options plus the described default options \* **caption** - a string, the user supplied caption \* **link** - a string, the "click-through" url for the photo \* **source** - a string, the url for the photo you want to use (use this or the data parameter) \* **data** - a list or string, a list of filepaths or a single file path for multipart file upload
+User methods
+------------
 
 .. code:: python
 
-    #Creates a photo post using a source URL
-    client.create_photo(blogName, state="published", tags=["testing", "ok"],
-                        source="https://68.media.tumblr.com/b965fbb2e501610a29d80ffb6fb3e1ad/tumblr_n55vdeTse11rn1906o1_500.jpg")
+    client.info()
+    client.dashboard()
+    client.likes()
+    client.following()
+    client.follow('codingjester.tumblr.com')
+    client.unfollow('codingjester.tumblr.com')
+    client.like(id, reblogkey)
+    client.unlike(id, reblogkey)
 
-    #Creates a photo post using a local filepath
-    client.create_photo(blogName, state="queue", tags=["testing", "ok"],
-                        tweet="Woah this is an incredible sweet post [URL]",
-                        data="/Users/johnb/path/to/my/image.jpg")
-
-    #Creates a photoset post using several local filepaths
-    client.create_photo(blogName, state="draft", tags=["jb is cool"], format="markdown",
-                        data=["/Users/johnb/path/to/my/image.jpg", "/Users/johnb/Pictures/kittens.jpg"],
-                        caption="## Mega sweet kittens")
-
-Creating a text post
-''''''''''''''''''''
-
-Creating a text post supports the same options as default and just a two other parameters \* **title** - a string, the optional title for the post. Supports markdown or html \* **body** - a string, the body of the of the post. Supports markdown or html
+Blog methods
+------------
 
 .. code:: python
 
-    #Creating a text post
-    client.create_text(blogName, state="published", slug="testing-text-posts", title="Testing", body="testing1 2 3 4")
+    client.blog_info(blogName)
+    client.posts(blogName, **params)
+    client.avatar(blogName)
+    client.blog_likes(blogName)
+    client.followers(blogName)
+    client.blog_following(blogName)
+    client.queue(blogName)
+    client.drafts(blogName)
+    client.submission(blogName)
 
-Creating a quote post
-'''''''''''''''''''''
+Legacy post creation
+--------------------
 
-Creating a quote post supports the same options as default and two other parameter \* **quote** - a string, the full text of the qote. Supports markdown or html \* **source** - a string, the cited source. HTML supported
-
-.. code:: python
-
-    #Creating a quote post
-    client.create_quote(blogName, state="queue", quote="I am the Walrus", source="Ringo")
-
-Creating a link post
-''''''''''''''''''''
-
--  **title** - a string, the title of post that you want. Supports HTML entities.
--  **url** - a string, the url that you want to create a link post for.
--  **description** - a string, the desciption of the link that you have
+The classic client preserves the familiar typed creation helpers:
 
 .. code:: python
 
-    #Create a link post
-    client.create_link(blogName, title="I like to search things, you should too.", url="https://duckduckgo.com",
-                       description="Search is pretty cool when a duck does it.")
+    client.create_text(
+        blogName,
+        state='published',
+        title='Testing',
+        body='testing 1 2 3 4',
+        tags=['testing'],
+    )
 
-Creating a chat post
-''''''''''''''''''''
+    client.create_photo(
+        blogName,
+        state='queue',
+        data='/path/to/image.jpg',
+        caption='A photo',
+    )
 
-Creating a chat post supports the same options as default and two other parameters \* **title** - a string, the title of the chat post \* **conversation** - a string, the text of the conversation/chat, with diablog labels (no html)
+    client.create_quote(blogName, quote='I am the Walrus', source='Ringo')
+    client.create_link(blogName, title='Search', url='https://duckduckgo.com')
 
-.. code:: python
-
-    #Create a chat post
-    chat = """John: Testing can be fun!
-    Renee: Testing is tedious and so are you.
-    John: Aw.
-    """
-    client.create_chat(blogName, title="Renee just doesn't understand.", conversation=chat, tags=["renee", "testing"])
-
-Creating an audio post
-''''''''''''''''''''''
-
-Creating an audio post allows for all default options and a has 3 other parameters. The only thing to keep in mind while dealing with audio posts is to make sure that you use the external\_url parameter or data. You cannot use both at the same time. \* **caption** - a string, the caption for your post \* **external\_url** - a string, the url of the site that hosts the audio file \* **data** - a string, the filepath of the audio file you want to upload to Tumblr
+Editing, reblogging and deleting
+--------------------------------
 
 .. code:: python
 
-    #Creating an audio file
-    client.create_audio(blogName, caption="Rock out.", data="/Users/johnb/Music/my/new/sweet/album.mp3")
+    client.edit_post(blogName, id=post_id, type='text', title='Updated')
+    client.reblog(blogName, id=125356, reblog_key='reblog_key')
+    client.delete_post(blogName, 123456)
 
-    #lets use soundcloud!
-    client.create_audio(blogName, caption="Mega rock out.", external_url="https://soundcloud.com/skrillex/sets/recess")
-
-Creating a video post
-'''''''''''''''''''''
-
-Creating a video post allows for all default options and has three other options. Like the other post types, it has some restrictions. You cannot use the embed and data parameters at the same time. \* **caption** - a string, the caption for your post \* **embed** - a string, the HTML embed code for the video \* **data** - a string, the path of the file you want to upload
+Tagged posts
+------------
 
 .. code:: python
 
-    #Creating an upload from YouTube
-    client.create_video(blogName, caption="Jon Snow. Mega ridiculous sword.",
-                        embed="http://www.youtube.com/watch?v=40pUYLacrj4")
-
-    #Creating a video post from local file
-    client.create_video(blogName, caption="testing", data="/Users/johnb/testing/ok/blah.mov")
-
-Editing a post
-^^^^^^^^^^^^^^
-
-Updating a post requires you knowing what type a post you're updating. You'll be able to supply to the post any of the options given above for updates.
-
-.. code:: python
-
-    client.edit_post(blogName, id=post_id, type="text", title="Updated")
-    client.edit_post(blogName, id=post_id, type="photo", data="/Users/johnb/mega/awesome.jpg")
-
-Reblogging a Post
-^^^^^^^^^^^^^^^^^
-
-Reblogging a post just requires knowing the post id and the reblog key, which is supplied in the JSON of any post object.
-
-.. code:: python
-
-    client.reblog(blogName, id=125356, reblog_key="reblog_key")
-
-Deleting a post
-^^^^^^^^^^^^^^^
-
-Deleting just requires that you own the post and have the post id
-
-.. code:: python
-
-    client.delete_post(blogName, 123456) # Deletes your post :(
-
-A note on tags: When passing tags, as params, please pass them as a list (not a comma-separated string):
-
-.. code:: python
-
-    client.create_text(blogName, tags=['hello', 'world'], ...)
-
-Getting notes for a post
-^^^^^^^^^^^^^^^^^^^^^^^^
-
-In order to get the notes for a post, you need to have the post id and the blog that it is on.
-
-.. code:: python
-
-    data = client.notes(blogName, id='123456')
-
-The results include a timestamp you can use to make future calls.
-
-.. code:: python
-
-    data = client.notes(blogName, id='123456', before_timestamp=data["_links"]["next"]["query_params"]["before_timestamp"])
-
-
-Tagged Methods
-~~~~~~~~~~~~~~
-
-.. code:: python
-
-    # get posts with a given tag
     client.tagged(tag, **params)
 
-Using the interactive console
------------------------------
+Interactive console
+===================
 
-This client comes with a nice interactive console to run you through the OAuth process, grab your tokens (and store them for future use).
-
-You'll need ``pyyaml`` installed to run it, but then it's just:
+For OAuth 1 setup, install the console dependencies and run:
 
 .. code:: bash
 
     $ python interactive_console.py
 
-and away you go! Tokens are stored in ``~/.tumblr`` and are also shared by other Tumblr API clients like the Ruby client.
+For OAuth 2 use ``interactive_console2.py``.
 
-Running tests
--------------
+Development and tests
+=====================
 
-The tests (and coverage reports) are run with nose, like this:
+The test suite uses pytest:
 
-.. code:: bash
+.. code-block:: bash
 
-    python setup.py test
+    $ python -m pip install -e . mock pytest
+    $ python -m pytest -q
+
+The modern public API also has an explicit documentation contract:
+
+.. code-block:: bash
+
+    $ python -m pytest -q tests/test_docs_contract.py
+
+That contract checks runtime methods, type stubs, the public modern guide and a
+no-network documented NPF creation flow. CI runs it before the full suite.
 
 Copyright and license
 =====================
 
 Copyright 2013 Tumblr, Inc.
 
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this work except in compliance with the License. You may obtain a copy of the License in the LICENSE file, or at:
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this work except in compliance with the License. You may obtain a copy of the
+License file in this repository or at https://www.apache.org/licenses/LICENSE-2.0.
 
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations.
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied.
 
 .. |Build Status| image:: https://github.com/tumblr/pytumblr/actions/workflows/ci.yaml/badge.svg
    :target: https://github.com/tumblr/pytumblr/actions/workflows/ci.yaml
