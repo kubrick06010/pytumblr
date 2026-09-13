@@ -1,6 +1,9 @@
 """Shared transport behavior for modern Tumblr API calls."""
 
 import json
+import mimetypes
+import os
+
 import requests
 
 
@@ -38,19 +41,31 @@ class ModernTransportMixin(object):
             return self._multipart_npf("put", url, payload, media_sources)
         return self.put_json(url, payload)
 
+    @staticmethod
+    def _multipart_file_tuple(identifier, source):
+        if hasattr(source, "read"):
+            filename = getattr(source, "name", str(identifier))
+            file_object = source
+        else:
+            filename = os.fspath(source)
+            file_object = None
+
+        content_type = mimetypes.guess_type(str(filename))[0] or "application/octet-stream"
+        return filename, file_object, content_type
+
     def _multipart_npf(self, method, url, payload, media_sources):
         opened = []
         files = [("json", (None, json.dumps(payload), "application/json"))]
         try:
             for identifier, source in media_sources.items():
-                if hasattr(source, "read"):
-                    file_object = source
-                    filename = getattr(source, "name", str(identifier))
-                else:
-                    file_object = open(source, "rb")
+                filename, file_object, content_type = self._multipart_file_tuple(identifier, source)
+                if file_object is None:
+                    file_object = open(filename, "rb")
                     opened.append(file_object)
-                    filename = str(source)
-                files.append((str(identifier), (filename, file_object)))
+                files.append((
+                    str(identifier),
+                    (os.path.basename(str(filename)), file_object, content_type),
+                ))
 
             kwargs = {
                 "files": files,
