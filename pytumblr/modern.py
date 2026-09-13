@@ -49,7 +49,6 @@ class ModernTumblrRestClient(TumblrRestClient):
     @staticmethod
     def _legacy_common(kwargs):
         result = dict(kwargs)
-        # No one-to-one NPF equivalents; keeping them would make payload validation lie.
         result.pop("tweet", None)
         result.pop("format", None)
         result.pop("photoset_layout", None)
@@ -77,6 +76,7 @@ class ModernTumblrRestClient(TumblrRestClient):
 
     @validate_blogname
     def create_post(self, blogname, **kwargs):
+        kwargs.setdefault("state", "published")
         self._validate_npf_payload(kwargs, require_content=True)
         payload = dict(kwargs)
         media_sources = payload.pop("media_sources", None)
@@ -199,7 +199,6 @@ class ModernTumblrRestClient(TumblrRestClient):
         resolved = self.get_single_post(blogname, post_id)
         return resolved or post
 
-    # Legacy-shaped convenience calls, implemented through modern NPF endpoints.
     @validate_blogname
     def create_text(self, blogname, **kwargs):
         kwargs = self._legacy_common(kwargs)
@@ -277,9 +276,10 @@ class ModernTumblrRestClient(TumblrRestClient):
         external_url = kwargs.pop("external_url", None)
         data = kwargs.pop("data", None)
         caption = kwargs.pop("caption", None)
+        provider = kwargs.pop("provider", None)
         content = []
         if external_url:
-            content.append(npf.audio_block(external_url))
+            content.append(npf.audio_block(external_url, provider=provider))
         elif data:
             content.append(npf.audio_upload_block("media0"))
             kwargs["media_sources"] = {"media0": data}
@@ -301,7 +301,6 @@ class ModernTumblrRestClient(TumblrRestClient):
             content.append(npf.video_upload_block("media0"))
             kwargs["media_sources"] = {"media0": data}
         elif embed:
-            # Legacy embed HTML has no lossless NPF equivalent; preserve as text.
             content.append(npf.text_block(embed))
         else:
             raise ValueError("create_video requires data or embed")
