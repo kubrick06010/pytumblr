@@ -14,8 +14,6 @@ with io.open(readme_file, encoding='utf-8') as f:
 
 
 class TestUploadCommand(Command):
-    """Allow testing setup.py upload to testpypi."""
-
     description = 'Build and publish the package to the test pypi server.'
     user_options = []
 
@@ -31,29 +29,20 @@ class TestUploadCommand(Command):
         except ImportError:
             print('Twine is required for testing uploads')
             sys.exit()
-
         assert twine
-
         try:
             print('Removing previous builds…')
-            rmtree(os.path.join(
-                os.path.abspath(os.path.dirname(__file__)),
-                'dist'))
+            rmtree(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'dist'))
         except OSError:
             pass
-
         print('Building Source and Wheel (universal) distribution…')
         os.system('{} setup.py sdist bdist_wheel --universal'.format(sys.executable))
-
         print('Uploading the package to PyPi via Twine…')
         os.system('twine upload --repository-url https://test.pypi.org/legacy/ dist/*')
-
         sys.exit()
 
 
 class UploadCommand(Command):
-    """Allow uploading to pypi with setup.py"""
-
     description = 'Build and publish the package to pypi.'
     user_options = []
 
@@ -69,23 +58,16 @@ class UploadCommand(Command):
         except ImportError:
             print('Twine is required for testing uploads')
             sys.exit()
-
         assert twine
-
         try:
             print('Removing previous builds…')
-            rmtree(os.path.join(
-                os.path.abspath(os.path.dirname(__file__)),
-                'dist'))
+            rmtree(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'dist'))
         except OSError:
             pass
-
         print('Building Source and Wheel (universal) distribution…')
         os.system('{} setup.py sdist bdist_wheel --universal'.format(sys.executable))
-
         print('Uploading the package to PyPi via Twine…')
         os.system('twine upload dist/*')
-
         sys.exit()
 
 
@@ -99,6 +81,8 @@ setup(
     url="https://github.com/tumblr/pytumblr",
     download_url="https://github.com/tumblr/pytumblr/archive/0.1.3.tar.gz",
     packages=['pytumblr'],
+    package_data={'pytumblr': ['*.pyi', 'py.typed']},
+    include_package_data=True,
     license="Apache Software License 2.0",
     zip_safe=False,
     keywords='pytumblr',
@@ -116,23 +100,18 @@ setup(
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
     ],
-
     test_suite='nose.collector',
-
     install_requires=[
         'future',
         'requests-oauthlib',
     ],
-
     extras_require={'console': ['PyYAML>=5.1']},
     scripts=['interactive_console.py', 'interactive_console2.py'],
-
     tests_require=[
         'nose',
         'nose-cov',
         'mock'
     ],
-
     cmdclass={
         'testupload': TestUploadCommand,
         'upload': UploadCommand,
