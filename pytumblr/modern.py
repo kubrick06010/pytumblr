@@ -16,32 +16,64 @@ class ModernTumblrRestClient(TumblrRestClient):
     }
 
     def __init__(self, *args, **kwargs):
+        self.consume_in_npf_by_default = kwargs.pop("consume_in_npf_by_default", True)
         super(ModernTumblrRestClient, self).__init__(*args, **kwargs)
         self._reblog_requirements_cache = {}
+
+    def npf_consumption_on(self):
+        self.consume_in_npf_by_default = True
+
+    def npf_consumption_off(self):
+        self.consume_in_npf_by_default = False
 
     @staticmethod
     def _validate_npf_payload(payload, require_content=False):
         unknown = set(payload) - ModernTumblrRestClient._NPF_OPTIONS
         if unknown:
             raise ValueError("Unknown NPF option(s): {}".format(", ".join(sorted(unknown))))
-
         content = payload.get("content")
         if require_content and (not isinstance(content, list) or not content):
             raise ValueError("content must be a non-empty list of NPF blocks")
         if content is not None and not isinstance(content, list):
             raise ValueError("content must be a list when provided")
-
         layout = payload.get("layout")
         if layout is not None and not isinstance(layout, list):
             raise ValueError("layout must be a list when provided")
-
         tags = payload.get("tags")
         if tags is not None and not isinstance(tags, (list, str)):
             raise ValueError("tags must be a list or comma-separated string")
-
         media_sources = payload.get("media_sources")
         if media_sources is not None and not isinstance(media_sources, dict):
             raise ValueError("media_sources must be a dict of identifier -> path/file")
+
+    @staticmethod
+    def _legacy_common(kwargs):
+        result = dict(kwargs)
+        # No one-to-one NPF equivalents; keeping them would make payload validation lie.
+        result.pop("tweet", None)
+        result.pop("format", None)
+        result.pop("photoset_layout", None)
+        return result
+
+    @validate_blogname
+    def posts(self, blogname, type=None, **kwargs):
+        kwargs.setdefault("npf", self.consume_in_npf_by_default)
+        return super(ModernTumblrRestClient, self).posts(blogname, type=type, **kwargs)
+
+    @validate_blogname
+    def queue(self, blogname, **kwargs):
+        kwargs.setdefault("npf", self.consume_in_npf_by_default)
+        return super(ModernTumblrRestClient, self).queue(blogname, **kwargs)
+
+    @validate_blogname
+    def drafts(self, blogname, **kwargs):
+        kwargs.setdefault("npf", self.consume_in_npf_by_default)
+        return super(ModernTumblrRestClient, self).drafts(blogname, **kwargs)
+
+    @validate_blogname
+    def submission(self, blogname, **kwargs):
+        kwargs.setdefault("npf", self.consume_in_npf_by_default)
+        return super(ModernTumblrRestClient, self).submission(blogname, **kwargs)
 
     @validate_blogname
     def create_post(self, blogname, **kwargs):
@@ -83,7 +115,7 @@ class ModernTumblrRestClient(TumblrRestClient):
     def get_single_post(self, blogname, id, **kwargs):
         params = dict(kwargs)
         params["id"] = id
-        params.setdefault("npf", True)
+        params.setdefault("npf", self.consume_in_npf_by_default)
         response = self.posts(blogname, **params)
         posts = response.get("posts", []) if isinstance(response, dict) else []
         return posts[0] if posts else None
@@ -107,7 +139,6 @@ class ModernTumblrRestClient(TumblrRestClient):
                 self._reblog_requirements_cache[cache_key] = cached
             parent_blog_uuid = parent_blog_uuid or cached[0]
             reblog_key = reblog_key or cached[1]
-
         kwargs.setdefault("content", [])
         kwargs.update({
             "parent_tumblelog_uuid": parent_blog_uuid,
@@ -143,7 +174,6 @@ class ModernTumblrRestClient(TumblrRestClient):
 
     @validate_blogname
     def iter_posts(self, blogname, max_items=None, **kwargs):
-        kwargs.setdefault("npf", True)
         for item in self._iter_collection(
                 lambda **params: self.posts(blogname, **params),
                 "posts", max_items=max_items, **kwargs):
@@ -151,7 +181,6 @@ class ModernTumblrRestClient(TumblrRestClient):
 
     @validate_blogname
     def iter_queue(self, blogname, max_items=None, **kwargs):
-        kwargs.setdefault("npf", True)
         for item in self._iter_collection(
                 lambda **params: self.queue(blogname, **params),
                 "posts", max_items=max_items, **kwargs):
@@ -170,9 +199,10 @@ class ModernTumblrRestClient(TumblrRestClient):
         resolved = self.get_single_post(blogname, post_id)
         return resolved or post
 
-    # Convenience NPF constructors/adapters. Existing TumblrRestClient remains unchanged.
+    # Legacy-shaped convenience calls, implemented through modern NPF endpoints.
     @validate_blogname
     def create_text(self, blogname, **kwargs):
+        kwargs = self._legacy_common(kwargs)
         title = kwargs.pop("title", None)
         body = kwargs.pop("body", "")
         content = []
@@ -184,14 +214,17 @@ class ModernTumblrRestClient(TumblrRestClient):
 
     @validate_blogname
     def create_link(self, blogname, **kwargs):
+        kwargs = self._legacy_common(kwargs)
         url = kwargs.pop("url")
         title = kwargs.pop("title", None)
         description = kwargs.pop("description", None)
+        kwargs.pop("thumbnail", None)
         kwargs["content"] = [npf.link_block(url, title=title, description=description)]
         return self.create_post(blogname, **kwargs)
 
     @validate_blogname
     def create_quote(self, blogname, **kwargs):
+        kwargs = self._legacy_common(kwargs)
         quote = kwargs.pop("quote")
         source = kwargs.pop("source", None)
         content = [npf.text_block(quote, subtype="quote")]
@@ -201,10 +234,24 @@ class ModernTumblrRestClient(TumblrRestClient):
         return self.create_post(blogname, **kwargs)
 
     @validate_blogname
+    def create_chat(self, blogname, **kwargs):
+        kwargs = self._legacy_common(kwargs)
+        title = kwargs.pop("title", None)
+        conversation = kwargs.pop("conversation", "")
+        content = []
+        if title:
+            content.append(npf.text_block(title, subtype="heading1"))
+        content.append(npf.text_block(conversation, subtype="chat"))
+        kwargs["content"] = content
+        return self.create_post(blogname, **kwargs)
+
+    @validate_blogname
     def create_photo(self, blogname, **kwargs):
+        kwargs = self._legacy_common(kwargs)
         source = kwargs.pop("source", None)
         data = kwargs.pop("data", None)
         caption = kwargs.pop("caption", None)
+        kwargs.pop("link", None)
         content = []
         media_sources = {}
         if source:
@@ -222,4 +269,43 @@ class ModernTumblrRestClient(TumblrRestClient):
         kwargs["content"] = content
         if media_sources:
             kwargs["media_sources"] = media_sources
+        return self.create_post(blogname, **kwargs)
+
+    @validate_blogname
+    def create_audio(self, blogname, **kwargs):
+        kwargs = self._legacy_common(kwargs)
+        external_url = kwargs.pop("external_url", None)
+        data = kwargs.pop("data", None)
+        caption = kwargs.pop("caption", None)
+        content = []
+        if external_url:
+            content.append(npf.audio_block(external_url))
+        elif data:
+            content.append(npf.audio_upload_block("media0"))
+            kwargs["media_sources"] = {"media0": data}
+        else:
+            raise ValueError("create_audio requires external_url or data")
+        if caption:
+            content.append(npf.text_block(caption))
+        kwargs["content"] = content
+        return self.create_post(blogname, **kwargs)
+
+    @validate_blogname
+    def create_video(self, blogname, **kwargs):
+        kwargs = self._legacy_common(kwargs)
+        data = kwargs.pop("data", None)
+        embed = kwargs.pop("embed", None)
+        caption = kwargs.pop("caption", None)
+        content = []
+        if data:
+            content.append(npf.video_upload_block("media0"))
+            kwargs["media_sources"] = {"media0": data}
+        elif embed:
+            # Legacy embed HTML has no lossless NPF equivalent; preserve as text.
+            content.append(npf.text_block(embed))
+        else:
+            raise ValueError("create_video requires data or embed")
+        if caption:
+            content.append(npf.text_block(caption))
+        kwargs["content"] = content
         return self.create_post(blogname, **kwargs)
