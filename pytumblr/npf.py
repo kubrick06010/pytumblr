@@ -21,46 +21,75 @@ def link_block(url, title=None, description=None, author=None, site_name=None):
     })
 
 
-def _media_block(block_type, url=None, identifier=None, media_type=None,
-                 width=None, height=None, alt_text=None):
-    media = _compact({
+def _media_object(url=None, identifier=None, media_type=None, width=None, height=None):
+    return _compact({
         "url": url,
         "identifier": str(identifier) if identifier is not None else None,
         "type": media_type,
         "width": width,
         "height": height,
     })
-    block = {"type": block_type, "media": [media]}
+
+
+def image_block(url, media_type=None, width=None, height=None, alt_text=None):
+    block = {
+        "type": "image",
+        "media": [_media_object(url=url, media_type=media_type, width=width, height=height)],
+    }
     if alt_text is not None:
         block["alt_text"] = alt_text
     return block
 
 
-def image_block(url, media_type=None, width=None, height=None, alt_text=None):
-    return _media_block("image", url=url, media_type=media_type,
-                        width=width, height=height, alt_text=alt_text)
+def image_upload_block(identifier, media_type=None, alt_text=None):
+    # Tumblr's creation API expects uploaded media references as a single
+    # identifier object. The API expands image uploads to a media-size array
+    # when the post is later consumed.
+    block = {
+        "type": "image",
+        "media": _media_object(identifier=identifier, media_type=media_type),
+    }
+    if alt_text is not None:
+        block["alt_text"] = alt_text
+    return block
 
 
-def image_upload_block(identifier, media_type="image/jpeg", alt_text=None):
-    return _media_block("image", identifier=identifier, media_type=media_type,
-                        alt_text=alt_text)
+def audio_block(url, provider=None, media_type=None):
+    block = {"type": "audio", "url": url}
+    if provider is not None:
+        block["provider"] = provider
+    if media_type is not None:
+        block["media"] = _media_object(url=url, media_type=media_type)
+        block.pop("url", None)
+    return block
 
 
-def audio_block(url, media_type=None):
-    return _media_block("audio", url=url, media_type=media_type)
+def audio_upload_block(identifier, media_type=None):
+    return {
+        "type": "audio",
+        "provider": "tumblr",
+        "media": _media_object(identifier=identifier, media_type=media_type),
+    }
 
 
-def audio_upload_block(identifier, media_type="audio/mpeg"):
-    return _media_block("audio", identifier=identifier, media_type=media_type)
+def video_block(url, provider=None, media_type=None, width=None, height=None):
+    block = {"type": "video", "url": url}
+    if provider is not None:
+        block["provider"] = provider
+    if media_type is not None:
+        block["media"] = _media_object(
+            url=url, media_type=media_type, width=width, height=height
+        )
+        block.pop("url", None)
+    return block
 
 
-def video_block(url, media_type=None, width=None, height=None):
-    return _media_block("video", url=url, media_type=media_type,
-                        width=width, height=height)
-
-
-def video_upload_block(identifier, media_type="video/mp4"):
-    return _media_block("video", identifier=identifier, media_type=media_type)
+def video_upload_block(identifier, media_type=None):
+    return {
+        "type": "video",
+        "provider": "tumblr",
+        "media": _media_object(identifier=identifier, media_type=media_type),
+    }
 
 
 def iter_blocks(post, include_trail=True):
