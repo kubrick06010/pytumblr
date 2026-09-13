@@ -87,6 +87,23 @@ class TumblrRequest2(object):
             )
         return self.json_parse(response)
 
+    def put(self, url, params=None, files=None):
+        """Issue an OAuth2-authenticated PUT request."""
+        url = self.host + url
+        params = params or {}
+        files = files or {}
+        if files:
+            response = requests.put(
+                url, data=params, files=files, headers=self.headers,
+                allow_redirects=False, timeout=self.timeout
+            )
+        else:
+            response = requests.put(
+                url, data=params, headers=self.headers,
+                allow_redirects=False, timeout=self.timeout
+            )
+        return self.json_parse(response)
+
     def delete(self, url, params):
         url = self.host + url
         if params:
