@@ -64,3 +64,5 @@ The branch covers:
 - local photo legacy→NPF adaptation
 
 CI now runs pytest, rather than only building distributions, across Python 3.7, 3.8, 3.9, 3.11 and 3.12 before building the package.
+
+Actions were explicitly enabled on the fork before this validation run.
