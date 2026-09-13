@@ -47,7 +47,7 @@ class ModernTransportMixin(object):
             filename = getattr(source, "name", str(identifier))
             file_object = source
         else:
-            filename = os.fspath(source)
+            filename = str(source)
             file_object = None
 
         content_type = mimetypes.guess_type(str(filename))[0] or "application/octet-stream"
