@@ -21,24 +21,46 @@ def link_block(url, title=None, description=None, author=None, site_name=None):
     })
 
 
-def image_block(url, media_type=None, width=None, height=None, alt_text=None):
+def _media_block(block_type, url=None, identifier=None, media_type=None,
+                 width=None, height=None, alt_text=None):
     media = _compact({
-        "url": url, "type": media_type, "width": width, "height": height,
+        "url": url,
+        "identifier": str(identifier) if identifier is not None else None,
+        "type": media_type,
+        "width": width,
+        "height": height,
     })
-    block = {"type": "image", "media": [media]}
+    block = {"type": block_type, "media": [media]}
     if alt_text is not None:
         block["alt_text"] = alt_text
     return block
+
+
+def image_block(url, media_type=None, width=None, height=None, alt_text=None):
+    return _media_block("image", url=url, media_type=media_type,
+                        width=width, height=height, alt_text=alt_text)
 
 
 def image_upload_block(identifier, media_type="image/jpeg", alt_text=None):
-    block = {
-        "type": "image",
-        "media": [{"type": media_type, "identifier": str(identifier)}],
-    }
-    if alt_text is not None:
-        block["alt_text"] = alt_text
-    return block
+    return _media_block("image", identifier=identifier, media_type=media_type,
+                        alt_text=alt_text)
+
+
+def audio_block(url, media_type=None):
+    return _media_block("audio", url=url, media_type=media_type)
+
+
+def audio_upload_block(identifier, media_type="audio/mpeg"):
+    return _media_block("audio", identifier=identifier, media_type=media_type)
+
+
+def video_block(url, media_type=None, width=None, height=None):
+    return _media_block("video", url=url, media_type=media_type,
+                        width=width, height=height)
+
+
+def video_upload_block(identifier, media_type="video/mp4"):
+    return _media_block("video", identifier=identifier, media_type=media_type)
 
 
 def iter_blocks(post, include_trail=True):
