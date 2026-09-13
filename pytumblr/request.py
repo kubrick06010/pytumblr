@@ -41,11 +41,6 @@ class TumblrRequest(object):
     def get(self, url, params):
         """
         Issues a GET request against the API, properly formatting the params
-
-        :param url: a string, the url you are requesting
-        :param params: a dict, the key-value of all the paramaters needed
-                       in the request
-        :returns: a dict parsed of the JSON response
         """
         url = self.host + url
         if params:
@@ -64,13 +59,6 @@ class TumblrRequest(object):
     def post(self, url, params=None, files=None):
         """
         Issues a POST request against the API, allows for multipart data uploads
-
-        :param url: a string, the url you are requesting
-        :param params: a dict, the key-value of all the parameters needed
-                       in the request
-        :param files: a list, the list of tuples of files
-
-        :returns: a dict parsed of the JSON response
         """
         url = self.host + url
         params = params or {}
@@ -86,14 +74,29 @@ class TumblrRequest(object):
         )
         return self.json_parse(resp)
 
+    def put(self, url, params=None, files=None):
+        """Issues a PUT request against the API."""
+        url = self.host + url
+        params = params or {}
+        files = files or {}
+        if files:
+            resp = requests.put(
+                url, data=params, files=files, headers=self.headers,
+                auth=self.oauth, allow_redirects=False, timeout=self.timeout
+            )
+        else:
+            data = urllib.parse.urlencode(params)
+            if not PY3:
+                data = str(data)
+            resp = requests.put(
+                url, data=data, headers=self.headers, auth=self.oauth,
+                allow_redirects=False, timeout=self.timeout
+            )
+        return self.json_parse(resp)
+
     def delete(self, url, params):
         """
         Issues a DELETE request against the API, properly formatting the params
-
-        :param url: a string, the url you are requesting
-        :param params: a dict, the key-value of all the paramaters needed
-                       in the request
-        :returns: a dict parsed of the JSON response
         """
         url = self.host + url
         if params:
@@ -113,18 +116,12 @@ class TumblrRequest(object):
         """
         Wraps and abstracts response validation and JSON parsing
         to make sure the user gets the correct response.
-
-        :param response: The response returned to us from the request
-
-        :returns: a dict of the json response
         """
         try:
             data = response.json()
         except ValueError:
             data = {'meta': { 'status': 500, 'msg': 'Server Error'}, 'response': {"error": "Malformed JSON or HTML was returned."}}
 
-        # We only really care about the response if we succeed
-        # and the error if we fail
         if 200 <= data['meta']['status'] <= 399:
             return data['response']
         else:
@@ -133,12 +130,6 @@ class TumblrRequest(object):
     def post_multipart(self, url, params, files):
         """
         Generates and issues a multipart request for data files
-
-        :param url: a string, the url you are requesting
-        :param params: a dict, a key-value of all the parameters
-        :param files:  a dict, matching the form '{name: file descriptor}'
-
-        :returns: a dict parsed from the JSON response
         """
         resp = requests.post(
             url,
